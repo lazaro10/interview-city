@@ -11,7 +11,7 @@ import SwiftUI
 struct interview_citiesApp: App {
     var body: some Scene {
         WindowGroup {
-            CityView()
+            CityBuilder.build()
         }
     }
 }
