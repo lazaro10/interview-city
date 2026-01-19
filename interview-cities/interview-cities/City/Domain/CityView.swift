@@ -1,28 +1,30 @@
 import SwiftUI
 
 struct CityView: View {
-    @StateObject private var viewModel: CityViewModel
+    @State private var viewModel: CityViewModel
     @State private var query: String = ""
 
     init(viewModel: CityViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        _viewModel = State(wrappedValue: viewModel)
     }
 
     var body: some View {
+        @Bindable var vm = viewModel
+
         VStack(spacing: 16) {
             HStack(spacing: 12) {
                 TextField("Search city", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.words)
                     .autocorrectionDisabled(true)
-                    .onSubmit { search() }
+                    .onSubmit { vm.search(query: query) }
 
-                Button("Search") { search() }
+                Button("Search") { vm.search(query: query) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isLoading)
+                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoading(vm.state))
             }
 
-            content
+            content(for: vm.state)
 
             Spacer()
         }
@@ -30,45 +32,50 @@ struct CityView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
-        if viewModel.isLoading {
+    private func content(for state: CityViewModel.State) -> some View {
+        switch state {
+        case .idle:
+            Text("Type a city name and tap Search.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+        case .loading:
             HStack(spacing: 12) {
                 ProgressView()
                 Text("Loading...")
                     .foregroundStyle(.secondary)
             }
-        } else if let message = viewModel.errorMessage {
+
+        case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
                 Text("Error")
                     .font(.headline)
+
                 Text(message)
                     .foregroundStyle(.secondary)
 
-                Button("Try again") { search() }
-                    .buttonStyle(.bordered)
-                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Try again") {
+                    viewModel.search(query: query)
+                }
+                .buttonStyle(.bordered)
+                .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-        } else if !viewModel.name.isEmpty {
+
+        case .loaded(let display):
             VStack(alignment: .leading, spacing: 8) {
-                Text(viewModel.name)
+                Text(display.name)
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text("Temperature: \(viewModel.temperature)")
-                    .font(.body)
-
-                Text("Weathercode: \(viewModel.weathercode)")
-                    .font(.body)
+                Text("Temperature: \(display.temperature)")
+                Text("Weathercode: \(display.weathercode)")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            Text("Type a city name and tap Search.")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func search() {
-        viewModel.getCityWeather(name: query)
+    private func isLoading(_ state: CityViewModel.State) -> Bool {
+        if case .loading = state { return true }
+        return false
     }
 }

@@ -1,17 +1,29 @@
 import Foundation
-import Combine
+import Observation
 
 @MainActor
-final class CityViewModel: ObservableObject {
-    @Published var name: String = ""
-    @Published var temperature: String = ""
-    @Published var weathercode: String = ""
-    
-    @Published var isLoading: Bool = false
-    @Published var errorMessage: String?
+@Observable
+final class CityViewModel {
+
+    enum State: Equatable {
+        case idle
+        case loading
+        case loaded(Display)
+        case failed(String)
+    }
+
+    struct Display: Equatable {
+        let name: String
+        let temperature: String
+        let weathercode: String
+    }
 
     private let cityRepository: CityRepositoryLogic
     private let cityWeatherRepository: CityWeatherRepositoryLogic
+
+    private(set) var state: State = .idle
+
+    private var searchTask: Task<Void, Never>?
 
     init(
         cityRepository: CityRepositoryLogic,
@@ -21,28 +33,40 @@ final class CityViewModel: ObservableObject {
         self.cityWeatherRepository = cityWeatherRepository
     }
 
-    func getCityWeather(name: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    func search(query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            state = .idle
+            return
+        }
 
-        isLoading = true
-        errorMessage = nil
+        searchTask?.cancel()
+        state = .loading
 
-        Task {
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+
             do {
-                guard let city = try await cityRepository.fetchCities(name: trimmed).results.first else {
+                let response = try await cityRepository.fetchCities(name: trimmed)
+
+                guard let city = response.results.first else {
+                    state = .failed("City not found.")
                     return
                 }
-                
+
                 let weather = try await cityWeatherRepository.fetchWeather(city: city)
-                
-                self.name = city.name
-                self.temperature = "\(weather.weather.temperature) \(weather.weatherUnits.temperature)"
-                self.weathercode = "\(weather.weather.weathercode)"
-                self.isLoading = false
+
+                state = .loaded(
+                    .init(
+                        name: city.name,
+                        temperature: "\(weather.weather.temperature) \(weather.weatherUnits.temperature)",
+                        weathercode: "\(weather.weather.weathercode)"
+                    )
+                )
+            } catch is CancellationError {
+                return
             } catch {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
+                state = .failed(error.localizedDescription)
             }
         }
     }
