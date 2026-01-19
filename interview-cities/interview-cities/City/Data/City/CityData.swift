@@ -1,7 +1,7 @@
-struct City: Decodable {
-    let results: [Data]
+struct CityData: Decodable {
+    let results: [City]
     
-    struct Data: Decodable{
+    struct City: Decodable{
         let name: String
         let latitude: Double
         let longitude: Double
